@@ -3,4 +3,5 @@
 .vscode
 config.js
 coverage
-dist
+distsrc/config.js
+src/config.json
