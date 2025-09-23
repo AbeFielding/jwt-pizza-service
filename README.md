@@ -12,7 +12,7 @@ In order for the server to work correctly it must be configured by providing a `
 
 ```js
 module.exports =  {
-    // Your JWT secret can be any random string you would like. It just needs to be secret.
+
    jwtSecret: 'yourjwtsecrethere',
    db: {
    connection: {
