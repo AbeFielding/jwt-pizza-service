@@ -66,7 +66,6 @@ jobs:
             }
           };" > src/config.js
 
-
       - name: Tests
         run: npm test
 
@@ -85,7 +84,7 @@ jobs:
           echo "Posting badge: coverage=$coverage color=$color"
           echo "POST -> /api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage"
 
-          # show response so we can verify success
+          # Show response headers & body so we can verify success or auth errors
           curl -i -X POST \
             "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=${coverage}%25&color=${color}" \
             -H "authorization: bearer ${{ secrets.FACTORY_API_KEY }}"
