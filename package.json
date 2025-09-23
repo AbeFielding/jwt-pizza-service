@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "lint": "eslint .",
+    "start": "node src/index.js",
+    "lint": "eslint . --max-warnings=0",
     "test": "jest --coverage --runInBand"
   },
   "license": "MIT",
