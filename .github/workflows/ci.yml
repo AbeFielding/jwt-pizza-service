@@ -5,10 +5,6 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
     name: Build
@@ -44,7 +40,7 @@ jobs:
         run: npm ci
 
       - name: Lint
-        run: eslint . --config eslint.config.cjs --max-warnings=0
+        run: npm run lint
 
       - name: Write config file
         run: |
@@ -76,19 +72,10 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           printf '{"version": "%s" }' "$version" > src/version.json
 
-      - name: Update coverage (create badge)
+      - name: Update coverage
         run: |
           sudo apt-get update && sudo apt-get install -y jq bc curl
           coverage=$(jq '.total.lines.pct' coverage/coverage-summary.json)
-          color=$(awk -v c="$coverage" 'BEGIN{print (c<80)?"red":"green"}')
-          echo "Posting badge: coverage=$coverage color=$color"
-          echo "POST -> /api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage"
-
-          # Show response headers & body so we can verify success or auth errors
-          curl -i -X POST \
-            "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=${coverage}%25&color=${color}" \
+          color=$(echo "$coverage < 80" | bc | awk '{if ($1) print "red"; else print "green"}')
+          curl -s -X POST "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color" \
             -H "authorization: bearer ${{ secrets.FACTORY_API_KEY }}"
-
-          echo ""
-          echo "Fetch badge back (should be 200):"
-          curl -i "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage"
