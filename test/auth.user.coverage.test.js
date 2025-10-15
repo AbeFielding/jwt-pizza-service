@@ -21,6 +21,10 @@ async function loginUser(service, email, password) {
 }
 
 describe('auth + user flows (coverage boost)', () => {
+  test('helper loginUser exists', () => {
+    expect(typeof loginUser).toBe('function');
+  });
+
   test('register diner → /me works → cannot list users (403)', async () => {
     const [user, token] = await registerUser(request(app));
     expect(user.email).toMatch(/@test\.com$/);
@@ -40,31 +44,31 @@ describe('auth + user flows (coverage boost)', () => {
     expect(list.status).toBe(403);
   });
 
- test('self-update (PUT /api/user/:id) returns new token and persists', async () => {
-  const [user, token] = await registerUser(request(app));
-  const newName = user.name + 'x';
-  const newEmail = user.email.replace('@', '+x@');
+  test('self-update (PUT /api/user/:id) returns new token and persists', async () => {
+    const [user, token] = await registerUser(request(app));
+    const newName = user.name + 'x';
+    const newEmail = user.email.replace('@', '+x@');
 
-  // self update
-  const upd = await request(app)
-    .put(`/api/user/${user.id}`)
-    .set('Authorization', `Bearer ${token}`)
-    .send({ name: newName, email: newEmail });
-  expect(upd.status).toBe(200);
-  expect(upd.body).toHaveProperty('user');
-  expect(upd.body).toHaveProperty('token');
-  expect(upd.body.user.name).toBe(newName);
-  expect(upd.body.user.email).toBe(newEmail);
+    // self update
+    const upd = await request(app)
+      .put(`/api/user/${user.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: newName, email: newEmail });
+    expect(upd.status).toBe(200);
+    expect(upd.body).toHaveProperty('user');
+    expect(upd.body).toHaveProperty('token');
+    expect(upd.body.user.name).toBe(newName);
+    expect(upd.body.user.email).toBe(newEmail);
 
-  // /me with the NEW token should reflect changes
-  const me = await request(app)
-    .get('/api/user/me')
-    .set('Authorization', `Bearer ${upd.body.token}`);
-  expect(me.status).toBe(200);
-  expect(me.body.name).toBe(newName);
-  expect(me.body.email).toBe(newEmail);
+    // /me with the NEW token should reflect changes
+    const me = await request(app)
+      .get('/api/user/me')
+      .set('Authorization', `Bearer ${upd.body.token}`);
+    expect(me.status).toBe(200);
+    expect(me.body.name).toBe(newName);
+    expect(me.body.email).toBe(newEmail);
+  });
 
-});
   test('admin can list users with pagination and name filter', async () => {
     // default admin is seeded; set auth directly
     const admin = { id: 1, name: '常用名字', email: 'a@jwt.com', roles: [{ role: 'admin' }] };
@@ -89,8 +93,8 @@ describe('auth + user flows (coverage boost)', () => {
       .get('/api/user?page=1&limit=10&name=Kai')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(filtered.status).toBe(200);
-    const names = filtered.body.users.map(u => u.name || '');
-    expect(names.some(n => /kai/i.test(n))).toBe(true);
+    const names = filtered.body.users.map((u) => u.name || '');
+    expect(names.some((n) => /kai/i.test(n))).toBe(true);
   });
 
   test('admin can delete a user; non-existent returns 404', async () => {

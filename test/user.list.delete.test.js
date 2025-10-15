@@ -10,6 +10,7 @@ describe('userRouter list/delete', () => {
 
   test('GET /api/user with non-admin token → 403', async () => {
     const [diner, dinerToken] = await registerUser(request(app));
+    expect(diner).toBeDefined(); 
     const res = await request(app)
       .get('/api/user')
       .set('Authorization', `Bearer ${dinerToken}`);
@@ -54,14 +55,15 @@ describe('userRouter list/delete', () => {
     const token = await setAuth(admin);
 
     const [kai] = await registerUser(request(app), { name: 'Kai Chen' });
+    expect(kai).toBeDefined();
 
     const res = await request(app)
       .get('/api/user?page=1&limit=10&name=Kai')
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    const names = res.body.users.map(u => u.name);
-    expect(names.some(n => /kai/i.test(n))).toBe(true);
+    const names = res.body.users.map((u) => u.name);
+    expect(names.some((n) => /kai/i.test(n))).toBe(true);
   });
 
   test('DELETE /api/user/:id without token → 401', async () => {
@@ -71,6 +73,7 @@ describe('userRouter list/delete', () => {
 
   test('DELETE /api/user/:id with non-admin token → 403', async () => {
     const [diner, dinerToken] = await registerUser(request(app));
+    expect(diner).toBeDefined();
     const res = await request(app)
       .delete('/api/user/99999')
       .set('Authorization', `Bearer ${dinerToken}`);
@@ -92,7 +95,7 @@ describe('userRouter list/delete', () => {
     const listRes = await request(app)
       .get('/api/user?page=1&limit=100&name=*')
       .set('Authorization', `Bearer ${adminToken}`);
-    const ids = (listRes.body.users || []).map(u => u.id);
+    const ids = (listRes.body.users || []).map((u) => u.id);
     expect(ids).not.toContain(userToDelete.id);
   });
 

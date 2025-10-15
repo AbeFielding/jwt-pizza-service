@@ -439,9 +439,9 @@ async listUsers({ page = 1, limit = 10, name = '*' }) {
         await connection.commit();
 
         return !!(res && typeof res.affectedRows === 'number' && res.affectedRows > 0);
-      } catch (e) {
-        await connection.rollback();
-        return false;
+      } catch {
+      await connection.rollback();
+      throw new StatusCodeError('unable to delete franchise', 500);
       }
     } finally {
       connection.end();

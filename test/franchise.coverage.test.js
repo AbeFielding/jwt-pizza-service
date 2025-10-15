@@ -71,6 +71,7 @@ describe('franchiseRouter coverage', () => {
 
     // Non-admin, non-franchise-admin cannot create a store
     const [stranger, strangerToken] = await registerUser(request(app));
+    expect(stranger).toBeDefined();
     const createStoreForbidden = await request(app)
       .post(`/api/franchise/${franchiseId}/store`)
       .set('Authorization', `Bearer ${strangerToken}`)
