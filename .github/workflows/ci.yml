@@ -86,7 +86,7 @@ jobs:
           rm -rf dist
           mkdir dist
 
-          # Dockerfile
+          # Dockerfile for ECS deployment
           cat > dist/Dockerfile <<'DOCKER'
           ARG NODE_VERSION=22
           FROM node:${NODE_VERSION}-alpine
@@ -98,15 +98,15 @@ jobs:
           CMD ["node","index.js","80"]
           DOCKER
 
-          # App files
+          # Copy app source files
           cp -r database dist 2>/dev/null || true
           cp -r model dist 2>/dev/null || true
           cp -r routes dist 2>/dev/null || true
           cp *.js dist 2>/dev/null || true
           cp package*.json dist
-          cp version.json dist
+          cp version.json dist 2>/dev/null || true
 
-          # Production config (RDS secrets)
+          # Production config with RDS credentials
           cat > dist/config.js <<'EOF'
           module.exports = {
             jwtSecret: '${{ secrets.JWT_SECRET }}',
@@ -134,7 +134,7 @@ jobs:
           path: dist/
 
   deploy:
-    name: Push image to ECR
+    name: Push image to ECR and deploy to ECS
     runs-on: ubuntu-latest
     needs: build
     permissions:
@@ -181,7 +181,7 @@ jobs:
             package
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }}" >> $GITHUB_OUTPUT
 
-      - name: Deploy new container
+      - name: Deploy new container to ECS
         run: |
           aws ecs update-service \
             --region us-east-1 \
