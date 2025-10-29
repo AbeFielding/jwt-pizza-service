@@ -84,33 +84,27 @@ jobs:
       - name: Create dist for image
         run: |
           rm -rf dist
-          mkdir -p dist/src
+          mkdir -p dist
 
-          # Dockerfile for ECS image
           cat > dist/Dockerfile <<'DOCKER'
           ARG NODE_VERSION=22
           FROM node:${NODE_VERSION}-alpine
           WORKDIR /usr/src/app
 
-          # Install dependencies
           COPY package*.json ./
           RUN npm ci
 
-          # Copy source code
           COPY . .
 
-          # Expose port and start service
           EXPOSE 80
           CMD ["node","src/service.js","80"]
           DOCKER
 
-          # Copy app source and metadata
           cp -r src dist/
           cp package*.json dist/
           cp version.json dist/ || true
 
-          # Overwrite with production config (RDS host)
-          cat > dist/src/config.js <<'EOF'
+          cat > dist/config.js <<'EOF'
           module.exports = {
             jwtSecret: '${{ secrets.JWT_SECRET }}',
             db: {
