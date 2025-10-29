@@ -41,29 +41,30 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Write config file for tests
+      # 🔧 Kill any pre-existing build artifacts so Jest doesn't see two package.json's
+      - name: Clean local build artifacts
+        run: |
+          rm -rf dist coverage
+
+      # ✅ CI test config: FORCE local MySQL (no secrets here)
+      - name: Write config file for tests (local MySQL)
         run: |
           cat > src/config.js <<'EOF'
-          const isCI = process.env.CI === 'true'; // GitHub Actions sets CI=true
-          const dbHost = isCI
-            ? '127.0.0.1'
-            : (process.env.DB_HOSTNAME || '${{ secrets.DB_HOSTNAME }}');
-
           module.exports = {
-            jwtSecret: process.env.JWT_SECRET || '${{ secrets.JWT_SECRET }}',
+            jwtSecret: 'local-ci-secret',
             db: {
               connection: {
-                host: dbHost,
-                user: process.env.DB_USERNAME || '${{ secrets.DB_USERNAME }}' || 'root',
-                password: process.env.DB_PASSWORD || '${{ secrets.DB_PASSWORD }}' || 'tempdbpassword',
+                host: '127.0.0.1',
+                user: 'root',
+                password: 'tempdbpassword',
                 database: 'pizza',
                 connectTimeout: 60000
               },
               listPerPage: 10
             },
             factory: {
-              url: process.env.FACTORY_URL || 'https://pizza-factory.cs329.click',
-              apiKey: process.env.FACTORY_API_KEY || '${{ secrets.FACTORY_API_KEY }}'
+              url: 'https://pizza-factory.cs329.click',
+              apiKey: 'local-ci-factory'
             }
           };
           EOF
@@ -88,12 +89,13 @@ jobs:
           curl -s -X POST "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color" \
             -H "authorization: bearer ${{ secrets.FACTORY_API_KEY }}"
 
-      - name: Create dist for image
+      # 📦 Build production dist that uses RDS (secrets)
+      - name: Create dist for image (production)
         run: |
           rm -rf dist
           mkdir -p dist
 
-          # Dockerfile for ECS image
+          # Dockerfile used for ECS
           cat > dist/Dockerfile <<'DOCKER'
           ARG NODE_VERSION=22
           FROM node:${NODE_VERSION}-alpine
@@ -102,19 +104,19 @@ jobs:
           COPY package*.json ./
           RUN npm ci
 
-          # Copy app source
+          # Copy app source (we upload 'dist' as build context; it already contains src/ and config.js below)
           COPY . .
 
           EXPOSE 80
           CMD ["node","src/service.js","80"]
           DOCKER
 
-          # Copy source and metadata into dist
+          # Copy app source and metadata into dist
           cp -r src dist/
           cp package*.json dist/
           cp version.json dist/ || true
 
-          # ✅ Production config (uses RDS)
+          # ✅ Production config for ECS (RDS via secrets)
           cat > dist/config.js <<'EOF'
           module.exports = {
             jwtSecret: process.env.JWT_SECRET || '${{ secrets.JWT_SECRET }}',
@@ -135,7 +137,7 @@ jobs:
           };
           EOF
 
-          # Remove test config to avoid conflicts
+          # Ensure there is no second config inside src/ for the image
           rm -f dist/src/config.js
 
       - name: Upload build artifact
@@ -175,7 +177,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push container image
+      - name: Build and push container image (linux/amd64)
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
