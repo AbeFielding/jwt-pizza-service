@@ -107,7 +107,7 @@ jobs:
           COPY . .
 
           EXPOSE 80
-          CMD ["node","src/service.js","80"]
+          CMD ["node","index.js","80"]
           DOCKER
 
           # Copy source and metadata that the container needs
