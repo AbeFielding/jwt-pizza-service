@@ -86,17 +86,31 @@ jobs:
           rm -rf dist
           mkdir dist
 
-          # Dockerfile (assumes CMD ["node","index.js","80"] inside)
-          cp Dockerfile dist
+          # Write Dockerfile directly into dist/
+          cat > dist/Dockerfile <<'DOCKER'
+          ARG NODE_VERSION=22
+          FROM node:${NODE_VERSION}-alpine
+          WORKDIR /usr/src/app
+
+          # install deps first for better layer caching
+          COPY package*.json ./
+          RUN npm ci
+
+          # copy the rest of the app
+          COPY . .
+
+          EXPOSE 80
+          CMD ["node","index.js","80"]
+          DOCKER
 
           # Copy app code (your project has root-level JS + folders)
-          cp -r database dist || true
-          cp -r model dist || true
-          cp -r routes dist || true
-          cp *.js dist || true
-          cp *.json dist
+          cp -r database dist 2>/dev/null || true
+          cp -r model dist 2>/dev/null || true
+          cp -r routes dist 2>/dev/null || true
+          cp *.js dist 2>/dev/null || true
+          cp package*.json dist
 
-          # Write a production config that points to RDS (secrets)
+          # Production config (RDS secrets)
           cat > dist/config.js <<'EOF'
           module.exports = {
             jwtSecret: '${{ secrets.JWT_SECRET }}',
@@ -163,7 +177,6 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: jwt-pizza-service
         run: |
-          # Build from the artifact dir so Dockerfile & app files are in context
           docker buildx build --platform=linux/arm64 \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }} \
