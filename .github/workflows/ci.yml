@@ -30,6 +30,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # Make sure no stale dist/ (avoids Jest "haste map" collision)
+      - name: Clean any previous dist
+        run: rm -rf dist
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -41,17 +45,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # 🔧 Kill any pre-existing build artifacts so Jest doesn't see two package.json's
-      - name: Clean local build artifacts
+      # Test config points to the local MySQL service
+      - name: Write config file for tests
         run: |
-          rm -rf dist coverage
-
-      # ✅ CI test config: FORCE local MySQL (no secrets here)
-      - name: Write config file for tests (local MySQL)
-        run: |
+          mkdir -p src
           cat > src/config.js <<'EOF'
           module.exports = {
-            jwtSecret: 'local-ci-secret',
+            jwtSecret: 'test-secret',
             db: {
               connection: {
                 host: '127.0.0.1',
@@ -64,14 +64,12 @@ jobs:
             },
             factory: {
               url: 'https://pizza-factory.cs329.click',
-              apiKey: 'local-ci-factory'
+              apiKey: 'test-factory-key'
             }
           };
           EOF
 
       - name: Run tests
-        env:
-          CI: true
         run: npm test
 
       - name: Set version
@@ -79,7 +77,7 @@ jobs:
         run: |
           version=$(date +'%Y%m%d.%H%M%S')
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          printf '{"version": "%s" }' "$version" > version.json
+          printf '{"version":"%s"}' "$version" > version.json
 
       - name: Update coverage badge
         run: |
@@ -89,34 +87,35 @@ jobs:
           curl -s -X POST "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color" \
             -H "authorization: bearer ${{ secrets.FACTORY_API_KEY }}"
 
-      # 📦 Build production dist that uses RDS (secrets)
+      # ---------- Build production dist (for container context) ----------
       - name: Create dist for image (production)
         run: |
           rm -rf dist
           mkdir -p dist
 
-          # Dockerfile used for ECS
+          # Dockerfile used by ECS image
           cat > dist/Dockerfile <<'DOCKER'
           ARG NODE_VERSION=22
           FROM node:${NODE_VERSION}-alpine
           WORKDIR /usr/src/app
 
+          # Install dependencies first for better caching
           COPY package*.json ./
           RUN npm ci
 
-          # Copy app source (we upload 'dist' as build context; it already contains src/ and config.js below)
+          # Copy app contents from the uploaded artifact context
           COPY . .
 
           EXPOSE 80
           CMD ["node","src/service.js","80"]
           DOCKER
 
-          # Copy app source and metadata into dist
+          # Copy source and metadata that the container needs
           cp -r src dist/
           cp package*.json dist/
           cp version.json dist/ || true
 
-          # ✅ Production config for ECS (RDS via secrets)
+          # Production config (lives at repo root in the image)
           cat > dist/config.js <<'EOF'
           module.exports = {
             jwtSecret: process.env.JWT_SECRET || '${{ secrets.JWT_SECRET }}',
@@ -137,8 +136,11 @@ jobs:
           };
           EOF
 
-          # Ensure there is no second config inside src/ for the image
-          rm -f dist/src/config.js
+          # Shim so code inside src/* that does require('../config.js') continues to work
+          mkdir -p dist/src
+          cat > dist/src/config.js <<'EOF'
+          module.exports = require('../config.js');
+          EOF
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -177,7 +179,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push container image (linux/amd64)
+      - name: Build and push container image (linux/amd64 only)
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -190,7 +192,6 @@ jobs:
             -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }} \
             --push \
             package
-
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }}" >> $GITHUB_OUTPUT
 
       - name: Deploy new container to ECS
