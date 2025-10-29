@@ -44,11 +44,16 @@ jobs:
       - name: Write config file for tests
         run: |
           cat > src/config.js <<'EOF'
+          const isCI = process.env.CI === 'true'; // GitHub Actions sets CI=true
+          const dbHost = isCI
+            ? '127.0.0.1'
+            : (process.env.DB_HOSTNAME || '${{ secrets.DB_HOSTNAME }}');
+
           module.exports = {
             jwtSecret: process.env.JWT_SECRET || '${{ secrets.JWT_SECRET }}',
             db: {
               connection: {
-                host: process.env.DB_HOSTNAME || '${{ secrets.DB_HOSTNAME }}' || '127.0.0.1',
+                host: dbHost,
                 user: process.env.DB_USERNAME || '${{ secrets.DB_USERNAME }}' || 'root',
                 password: process.env.DB_PASSWORD || '${{ secrets.DB_PASSWORD }}' || 'tempdbpassword',
                 database: 'pizza',
@@ -64,6 +69,8 @@ jobs:
           EOF
 
       - name: Run tests
+        env:
+          CI: true
         run: npm test
 
       - name: Set version
@@ -86,6 +93,7 @@ jobs:
           rm -rf dist
           mkdir -p dist
 
+          # Dockerfile for ECS image
           cat > dist/Dockerfile <<'DOCKER'
           ARG NODE_VERSION=22
           FROM node:${NODE_VERSION}-alpine
@@ -94,16 +102,19 @@ jobs:
           COPY package*.json ./
           RUN npm ci
 
+          # Copy app source
           COPY . .
 
           EXPOSE 80
           CMD ["node","src/service.js","80"]
           DOCKER
 
+          # Copy source and metadata into dist
           cp -r src dist/
           cp package*.json dist/
           cp version.json dist/ || true
 
+          # ✅ Production config (uses RDS)
           cat > dist/config.js <<'EOF'
           module.exports = {
             jwtSecret: process.env.JWT_SECRET || '${{ secrets.JWT_SECRET }}',
@@ -124,6 +135,7 @@ jobs:
           };
           EOF
 
+          # Remove test config to avoid conflicts
           rm -f dist/src/config.js
 
       - name: Upload build artifact
