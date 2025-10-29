@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build
+    name: Build and Test
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.set_version.outputs.version }}
@@ -63,17 +63,17 @@ jobs:
           };
           EOF
 
-      - name: Tests
+      - name: Run tests
         run: npm test
 
-      - name: set version
+      - name: Set version
         id: set_version
         run: |
           version=$(date +'%Y%m%d.%H%M%S')
           echo "version=$version" >> "$GITHUB_OUTPUT"
           printf '{"version": "%s" }' "$version" > version.json
 
-      - name: Update coverage
+      - name: Update coverage badge
         run: |
           sudo apt-get update && sudo apt-get install -y jq bc curl
           coverage=$(jq '.total.lines.pct' coverage/coverage-summary.json)
@@ -86,28 +86,26 @@ jobs:
           rm -rf dist
           mkdir dist
 
-          # Dockerfile for ECS deployment
           cat > dist/Dockerfile <<'DOCKER'
           ARG NODE_VERSION=22
           FROM node:${NODE_VERSION}-alpine
           WORKDIR /usr/src/app
+
+          # Install dependencies
           COPY package*.json ./
           RUN npm ci
-          COPY . .
+
+          # Copy source code
+          COPY src ./src
+          COPY version.json ./
+
+          # Expose port and run service
           EXPOSE 80
-          CMD ["node","index.js","80"]
+          CMD ["node","src/service.js","80"]
           DOCKER
 
-          # Copy app source files
-          cp -r database dist 2>/dev/null || true
-          cp -r model dist 2>/dev/null || true
-          cp -r routes dist 2>/dev/null || true
-          cp *.js dist 2>/dev/null || true
-          cp package*.json dist
-          cp version.json dist 2>/dev/null || true
-
-          # Production config with RDS credentials
-          cat > dist/config.js <<'EOF'
+          mkdir -p dist/src
+          cat > dist/src/config.js <<'EOF'
           module.exports = {
             jwtSecret: '${{ secrets.JWT_SECRET }}',
             db: {
@@ -127,7 +125,12 @@ jobs:
           };
           EOF
 
-      - name: Upload distribution artifact
+          # Copy required files into dist
+          cp package*.json dist/
+          cp -r src dist/
+          cp version.json dist/ || true
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: package
@@ -179,6 +182,7 @@ jobs:
             -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }} \
             --push \
             package
+
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }}" >> $GITHUB_OUTPUT
 
       - name: Deploy new container to ECS
