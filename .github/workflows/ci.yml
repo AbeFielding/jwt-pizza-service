@@ -84,8 +84,9 @@ jobs:
       - name: Create dist for image
         run: |
           rm -rf dist
-          mkdir dist
+          mkdir -p dist/src
 
+          # Dockerfile for ECS image
           cat > dist/Dockerfile <<'DOCKER'
           ARG NODE_VERSION=22
           FROM node:${NODE_VERSION}-alpine
@@ -98,12 +99,17 @@ jobs:
           # Copy source code
           COPY . .
 
-          # Expose port and run service
+          # Expose port and start service
           EXPOSE 80
           CMD ["node","src/service.js","80"]
           DOCKER
 
-          mkdir -p dist/src
+          # Copy app source and metadata
+          cp -r src dist/
+          cp package*.json dist/
+          cp version.json dist/ || true
+
+          # Overwrite with production config (RDS host)
           cat > dist/src/config.js <<'EOF'
           module.exports = {
             jwtSecret: '${{ secrets.JWT_SECRET }}',
@@ -123,11 +129,6 @@ jobs:
             }
           };
           EOF
-
-          # Copy required files into dist
-          cp package*.json dist/
-          cp -r src dist/
-          cp version.json dist/ || true
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -176,6 +177,7 @@ jobs:
           ECR_REPOSITORY: jwt-pizza-service
         run: |
           docker buildx build \
+            --no-cache \  # force rebuild to avoid cached layer with old config
             --platform=linux/amd64,linux/arm64 \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }} \
