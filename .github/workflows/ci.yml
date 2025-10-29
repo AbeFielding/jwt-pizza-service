@@ -177,7 +177,7 @@ jobs:
           ECR_REPOSITORY: jwt-pizza-service
         run: |
           docker buildx build \
-            --no-cache \  # force rebuild to avoid cached layer with old config
+            --no-cache \
             --platform=linux/amd64,linux/arm64 \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }} \
