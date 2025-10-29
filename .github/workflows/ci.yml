@@ -158,9 +158,6 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up machine emulation (ARM64)
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -172,7 +169,7 @@ jobs:
         run: |
           docker buildx build \
             --no-cache \
-            --platform=linux/amd64,linux/arm64 \
+            --platform=linux/amd64 \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }} \
             --push \
