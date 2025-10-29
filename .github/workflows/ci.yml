@@ -30,7 +30,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Avoid Jest "haste map" collisions with stale dist
       - name: Clean any previous dist
         run: rm -rf dist
 
@@ -45,7 +44,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # Test config points to the MySQL service container (localhost)
       - name: Write config file for tests
         run: |
           mkdir -p src
@@ -87,47 +85,38 @@ jobs:
           curl -s -X POST "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color" \
             -H "authorization: bearer ${{ secrets.FACTORY_API_KEY }}"
 
-      # ---------- Build production dist (for container context) ----------
       - name: Create dist for image (production)
         run: |
           rm -rf dist
           mkdir -p dist
 
-          # Dockerfile used by ECS/Fargate image
           cat > dist/Dockerfile <<'DOCKER'
           ARG NODE_VERSION=22
           FROM node:${NODE_VERSION}-alpine
           WORKDIR /usr/src/app
 
-          # Install deps first for better layer caching
           COPY package*.json ./
           RUN npm ci
 
-          # Copy the prepared app context
           COPY . .
 
           EXPOSE 80
           CMD ["node","index.js","80"]
           DOCKER
 
-          # ---- Copy app code to match runtime paths ----
           # Root-level JS (index.js, service.js, endpointHelper.js, init.js if present)
           cp src/*.js dist/ 2>/dev/null || true
 
-          # Feature folders at image root (service.js uses './routes/...', etc.)
           cp -r src/routes dist/routes
           cp -r src/model dist/model
           cp -r src/database dist/database
 
-          # Keep a src/ copy too (not strictly needed, but harmless)
           mkdir -p dist/src
           cp -r src/* dist/src/
 
-          # Package metadata + version
           cp package*.json dist/
           cp version.json dist/ || true
 
-          # ---- Production config at image root ----
           cat > dist/config.js <<'EOF'
           module.exports = {
             jwtSecret: process.env.JWT_SECRET || '${{ secrets.JWT_SECRET }}',
@@ -148,7 +137,6 @@ jobs:
           };
           EOF
 
-          # Shim so modules that do require('../config.js') from src/* still work
           cat > dist/src/config.js <<'EOF'
           module.exports = require('../config.js');
           EOF
