@@ -6,3 +6,4 @@ coverage
 distsrc/config.js
 src/config.json
 .env.local
+Dockerfile
