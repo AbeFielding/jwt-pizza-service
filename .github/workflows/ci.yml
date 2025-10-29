@@ -30,7 +30,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Make sure no stale dist/ (avoids Jest "haste map" collision)
       - name: Clean any previous dist
         run: rm -rf dist
 
@@ -45,7 +44,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # Test config points to the local MySQL service
       - name: Write config file for tests
         run: |
           mkdir -p src
@@ -87,7 +85,6 @@ jobs:
           curl -s -X POST "https://pizza-factory.cs329.click/api/badge/${{ secrets.NET_ID }}/jwtpizzaservicecoverage?label=Coverage&value=$coverage%25&color=$color" \
             -H "authorization: bearer ${{ secrets.FACTORY_API_KEY }}"
 
-      # ---------- Build production dist (for container context) ----------
       - name: Create dist for image (production)
         run: |
           rm -rf dist
@@ -99,23 +96,25 @@ jobs:
           FROM node:${NODE_VERSION}-alpine
           WORKDIR /usr/src/app
 
-          # Install dependencies first for better caching
+          # Install dependencies (cache-friendly)
           COPY package*.json ./
           RUN npm ci
 
-          # Copy app contents from the uploaded artifact context
+          # Copy the prepared app contents
           COPY . .
 
           EXPOSE 80
           CMD ["node","index.js","80"]
           DOCKER
 
-          # Copy source and metadata that the container needs
+          # Copy source and metadata the container needs
           cp -r src dist/
+          cp src/index.js dist/        # ensure entrypoint exists at image root
+          cp src/service.js dist/      # keep service runner available
           cp package*.json dist/
           cp version.json dist/ || true
 
-          # Production config (lives at repo root in the image)
+          # Production config at image root
           cat > dist/config.js <<'EOF'
           module.exports = {
             jwtSecret: process.env.JWT_SECRET || '${{ secrets.JWT_SECRET }}',
@@ -136,7 +135,7 @@ jobs:
           };
           EOF
 
-          # Shim so code inside src/* that does require('../config.js') continues to work
+          # Keep code like require('../config.js') working from src/*
           mkdir -p dist/src
           cat > dist/src/config.js <<'EOF'
           module.exports = require('../config.js');
