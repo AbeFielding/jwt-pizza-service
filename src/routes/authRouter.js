@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const config = require('../config.js');
 const { asyncHandler } = require('../endpointHelper.js');
 const { DB, Role } = require('../database/database.js');
+const metrics = require('../metrics');
 
 const authRouter = express.Router();
 
@@ -12,14 +13,25 @@ authRouter.docs = [
     path: '/api/auth',
     description: 'Register a new user',
     example: `curl -X POST localhost:3000/api/auth -d '{"name":"pizza diner", "email":"d@jwt.com", "password":"diner"}' -H 'Content-Type: application/json'`,
-    response: { user: { id: 2, name: 'pizza diner', email: 'd@jwt.com', roles: [{ role: 'diner' }] }, token: 'tttttt' },
+    response: {
+      user: { id: 2, name: 'pizza diner', email: 'd@jwt.com', roles: [{ role: 'diner' }] },
+      token: 'tttttt',
+    },
   },
   {
     method: 'PUT',
     path: '/api/auth',
     description: 'Login existing user',
     example: `curl -X PUT localhost:3000/api/auth -d '{"email":"a@jwt.com", "password":"admin"}' -H 'Content-Type: application/json'`,
-    response: { user: { id: 1, name: '常用名字', email: 'a@jwt.com', roles: [{ role: 'admin' }] }, token: 'tttttt' },
+    response: {
+      user: {
+        id: 1,
+        name: '常用名字',
+        email: 'a@jwt.com',
+        roles: [{ role: 'admin' }],
+      },
+      token: 'tttttt',
+    },
   },
   {
     method: 'DELETE',
@@ -36,7 +48,6 @@ async function setAuthUser(req, res, next) {
   if (token) {
     try {
       if (await DB.isLoggedIn(token)) {
-        // Check the database to make sure the token is valid.
         req.user = jwt.verify(token, config.jwtSecret);
         req.user.isRole = (role) => !!req.user.roles.find((r) => r.role === role);
       }
@@ -69,14 +80,19 @@ authRouter.post(
   })
 );
 
-// login
 authRouter.put(
   '/',
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
-    const user = await DB.getUser(email, password);
-    const auth = await setAuth(user);
-    res.json({ user: user, token: auth });
+    try {
+      const user = await DB.getUser(email, password);
+      const auth = await setAuth(user);
+      metrics.recordAuth(true);
+      res.json({ user: user, token: auth });
+    } catch (err) {
+      metrics.recordAuth(false);
+      res.status(401).json({ message: 'invalid credentials' });
+    }
   })
 );
 

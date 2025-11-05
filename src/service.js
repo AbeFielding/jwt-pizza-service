@@ -5,10 +5,15 @@ const franchiseRouter = require('./routes/franchiseRouter.js');
 const userRouter = require('./routes/userRouter.js');
 const version = require('./version.json');
 const config = require('./config.js');
+const metrics = require('./metrics'); 
 
 const app = express();
 app.use(express.json());
 app.use(setAuthUser);
+
+metrics.start(60000);          
+app.use(metrics.requestTracker);
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
@@ -17,6 +22,7 @@ app.use((req, res, next) => {
   next();
 });
 
+// Routers
 const apiRouter = express.Router();
 app.use('/api', apiRouter);
 apiRouter.use('/auth', authRouter);
@@ -27,7 +33,12 @@ apiRouter.use('/franchise', franchiseRouter);
 apiRouter.use('/docs', (req, res) => {
   res.json({
     version: version.version,
-    endpoints: [...authRouter.docs, ...userRouter.docs, ...orderRouter.docs, ...franchiseRouter.docs],
+    endpoints: [
+      ...authRouter.docs,
+      ...userRouter.docs,
+      ...orderRouter.docs,
+      ...franchiseRouter.docs,
+    ],
     config: { factory: config.factory.url, db: config.db.connection.host },
   });
 });
