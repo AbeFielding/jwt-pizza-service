@@ -1,5 +1,6 @@
 const axios = require('axios');
 const os = require('os');
+const { DB } = require('./database/database'); // for active user count
 
 let metricsConfig = {};
 try {
@@ -21,6 +22,7 @@ class Metrics {
     this.auth = { success: 0, fail: 0 };
     this.pizza = { sold: 0, failed: 0, revenue: 0 };
     this.latencySamples = [];
+    this.pizzaLatencySamples = [];
   }
 
   requestTracker = (req, res, next) => {
@@ -49,8 +51,8 @@ class Metrics {
       this.pizza.failed++;
     }
     if (Number.isFinite(latencyMs)) {
-      this.latencySamples.push(latencyMs);
-      if (this.latencySamples.length > 200) this.latencySamples.shift();
+      this.pizzaLatencySamples.push(latencyMs);
+      if (this.pizzaLatencySamples.length > 200) this.pizzaLatencySamples.shift();
     }
   }
 
@@ -65,6 +67,16 @@ class Metrics {
     };
   }
 
+  async getActiveUsers() {
+    try {
+      const result = await DB.pool.query('SELECT COUNT(*) AS count FROM login');
+      return result[0][0].count || 0;
+    } catch (err) {
+      console.error('⚠️ Failed to get active users:', err.message);
+      return 0;
+    }
+  }
+
   async push() {
     if (process.env.NODE_ENV === 'test' || !this.url || !this.apiKey) {
       this.resetCounters();
@@ -76,7 +88,13 @@ class Metrics {
         ? 0
         : this.latencySamples.reduce((a, b) => a + b, 0) / this.latencySamples.length;
 
+    const avgPizzaLatency =
+      this.pizzaLatencySamples.length === 0
+        ? 0
+        : this.pizzaLatencySamples.reduce((a, b) => a + b, 0) / this.pizzaLatencySamples.length;
+
     const sys = this.getSystem();
+    const activeUsers = await this.getActiveUsers();
     const now = Date.now() * 1_000_000;
 
     const makeGauge = (name, value, unit = '%') => ({
@@ -119,10 +137,12 @@ class Metrics {
       makeSum('auth_fail_total', this.auth.fail),
       makeSum('pizza_sold_total', this.pizza.sold),
       makeSum('pizza_failed_total', this.pizza.failed),
-      makeSum('pizza_revenue_total', this.pizza.revenue, 'usd'),
+      makeSum('pizza_revenue_total', this.pizza.revenue, 'btc'),
       makeGauge('latency_avg_ms', avgLatency, 'ms'),
+      makeGauge('pizza_creation_latency_ms', avgPizzaLatency, 'ms'),
       makeGauge('system_cpu_percent', sys.cpu, '%'),
       makeGauge('system_mem_percent', sys.mem, '%'),
+      makeGauge('active_users_total', activeUsers, 'users'),
     ];
 
     try {
