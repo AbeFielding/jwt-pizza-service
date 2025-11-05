@@ -1,12 +1,18 @@
 const axios = require('axios');
 const os = require('os');
-const { metrics } = require('./config');
+
+let metricsConfig = {};
+try {
+  metricsConfig = require('./config').metrics || {};
+} catch {
+  metricsConfig = {};
+}
 
 class Metrics {
   constructor() {
-    this.url = metrics.url;
-    this.apiKey = metrics.apiKey;
-    this.source = metrics.source;
+    this.url = metricsConfig.url || '';
+    this.apiKey = metricsConfig.apiKey || '';
+    this.source = metricsConfig.source || 'jwt-pizza-service-dev';
     this.resetCounters();
   }
 
@@ -60,6 +66,11 @@ class Metrics {
   }
 
   async push() {
+    if (process.env.NODE_ENV === 'test' || !this.url || !this.apiKey) {
+      this.resetCounters();
+      return;
+    }
+
     const avgLatency =
       this.latencySamples.length === 0
         ? 0
