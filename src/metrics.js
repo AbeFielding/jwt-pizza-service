@@ -8,7 +8,6 @@ try {
   metricsConfig = {};
 }
 
-
 class Metrics {
   constructor() {
     this.url = metricsConfig.url || '';
