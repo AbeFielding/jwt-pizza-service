@@ -70,11 +70,12 @@ class Metrics {
   async getActiveUsers() {
     try {
       const result = await DB.pool.query('SELECT COUNT(*) AS count FROM login');
-      return result[0][0].count || 0;
+      const count = result[0]?.[0]?.count ?? result[0]?.count ?? 0;
+      return count;
     } catch (err) {
       console.error('⚠️ Failed to get active users:', err.message);
       return 0;
-    }
+   }
   }
 
   async push() {
@@ -160,8 +161,12 @@ class Metrics {
     } catch (e) {
       console.error('❌ Metrics push failed:', e.message);
     } finally {
-      this.resetCounters();
-    }
+        this.req = { total: 0, get: 0, post: 0, put: 0, delete: 0 };
+        this.auth = { success: 0, fail: 0 };
+        this.pizza.sold = 0;
+        this.pizza.failed = 0;
+        this.pizza.revenue = 0;
+}
   }
 
   start(intervalMs = 60000) {
