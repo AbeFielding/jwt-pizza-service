@@ -132,7 +132,7 @@ class Metrics {
         {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Basic ${Buffer.from(this.apiKey).toString('base64')}`,
+            Authorization: `Basic ${this.apiKey}`,
           },
         }
       );
