@@ -103,8 +103,9 @@ orderRouter.post(
         metrics.recordPizza(false, latency, 0);
         res.status(500).send({ message: 'Failed to fulfill order at factory', followLinkToEndChaos: j.reportUrl });
       }
-    } catch (err) {
+    } catch (e) {
       const latency = Date.now() - start;
+      console.error('order creation error:', e);
       metrics.recordPizza(false, latency, 0);
       res.status(500).send({ message: 'Unexpected error' });
     }

@@ -80,6 +80,7 @@ authRouter.post(
   })
 );
 
+// login
 authRouter.put(
   '/',
   asyncHandler(async (req, res) => {
@@ -87,10 +88,11 @@ authRouter.put(
     try {
       const user = await DB.getUser(email, password);
       const auth = await setAuth(user);
-      metrics.recordAuth(true);
+      metrics.recordAuth(true); 
       res.json({ user: user, token: auth });
-    } catch (err) {
-      metrics.recordAuth(false);
+    } catch (e) {
+      console.error('login error:', e); 
+      metrics.recordAuth(false);       
       res.status(401).json({ message: 'invalid credentials' });
     }
   })
