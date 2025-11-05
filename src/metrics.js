@@ -68,15 +68,16 @@ class Metrics {
   }
 
   async getActiveUsers() {
-    try {
-      const result = await DB.pool.query('SELECT COUNT(*) AS count FROM login');
-      const count = result[0]?.[0]?.count ?? result[0]?.count ?? 0;
-      return count;
-    } catch (err) {
-      console.error('⚠️ Failed to get active users:', err.message);
-      return 0;
-   }
+  try {
+    const connection = await DB.getConnection();
+    const [rows] = await connection.execute('SELECT COUNT(*) AS count FROM auth');
+    connection.end();
+    return rows[0]?.count ?? 0;
+  } catch (err) {
+    console.error('⚠️ Failed to get active users:', err.message);
+    return 0;
   }
+}
 
   async push() {
     if (process.env.NODE_ENV === 'test' || !this.url || !this.apiKey) {
