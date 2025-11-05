@@ -1,13 +1,12 @@
 const axios = require('axios');
 const os = require('os');
-const { metrics = {} } = require('./config');
+const { metrics } = require('./config');
 
 class Metrics {
   constructor() {
-    this.url = metrics.url || '';
-    this.apiKey = metrics.apiKey || '';
-    this.source = metrics.source || 'jwt-pizza-service-dev';
-
+    this.url = metrics.url;
+    this.apiKey = metrics.apiKey;
+    this.source = metrics.source;
     this.resetCounters();
   }
 
@@ -54,13 +53,10 @@ class Metrics {
     const mem = os.totalmem()
       ? ((os.totalmem() - os.freemem()) / os.totalmem()) * 100
       : 0;
-    return { cpu: Number.isFinite(cpu) ? cpu.toFixed(2) : '0.00', mem: Number.isFinite(mem) ? mem.toFixed(2) : '0.00' };
-  }
-
-  canSend() {
-    if (process.env.NODE_ENV === 'test') return false;
-    if (!this.url || !this.apiKey) return false;
-    return true;
+    return {
+      cpu: Number.isFinite(cpu) ? cpu.toFixed(2) : '0.00',
+      mem: Number.isFinite(mem) ? mem.toFixed(2) : '0.00',
+    };
   }
 
   async push() {
@@ -70,40 +66,68 @@ class Metrics {
         : this.latencySamples.reduce((a, b) => a + b, 0) / this.latencySamples.length;
 
     const sys = this.getSystem();
-    const src = this.source.replace(/"/g, '');
+    const now = Date.now() * 1_000_000;
 
-    const lines = [
-      `http_requests_total{source="${src}"} ${this.req.total}`,
-      `http_requests_get{source="${src}"} ${this.req.get}`,
-      `http_requests_post{source="${src}"} ${this.req.post}`,
-      `http_requests_put{source="${src}"} ${this.req.put}`,
-      `http_requests_delete{source="${src}"} ${this.req.delete}`,
-      `auth_success_total{source="${src}"} ${this.auth.success}`,
-      `auth_fail_total{source="${src}"} ${this.auth.fail}`,
-      `pizza_sold_total{source="${src}"} ${this.pizza.sold}`,
-      `pizza_failed_total{source="${src}"} ${this.pizza.failed}`,
-      `pizza_revenue_total{source="${src}"} ${this.pizza.revenue}`,
-      `latency_avg_ms{source="${src}"} ${avgLatency.toFixed(2)}`,
-      `system_cpu_percent{source="${src}"} ${sys.cpu}`,
-      `system_mem_percent{source="${src}"} ${sys.mem}`,
+    const makeGauge = (name, value, unit = '%') => ({
+      name,
+      unit,
+      gauge: {
+        dataPoints: [
+          {
+            asDouble: value,
+            timeUnixNano: now,
+            attributes: [{ key: 'source', value: { stringValue: this.source } }],
+          },
+        ],
+      },
+    });
+
+    const makeSum = (name, value, unit = '1') => ({
+      name,
+      unit,
+      sum: {
+        aggregationTemporality: 'AGGREGATION_TEMPORALITY_CUMULATIVE',
+        isMonotonic: true,
+        dataPoints: [
+          {
+            asDouble: value,
+            timeUnixNano: now,
+            attributes: [{ key: 'source', value: { stringValue: this.source } }],
+          },
+        ],
+      },
+    });
+
+    const metricsList = [
+      makeSum('http_requests_total', this.req.total),
+      makeSum('http_requests_get', this.req.get),
+      makeSum('http_requests_post', this.req.post),
+      makeSum('http_requests_put', this.req.put),
+      makeSum('http_requests_delete', this.req.delete),
+      makeSum('auth_success_total', this.auth.success),
+      makeSum('auth_fail_total', this.auth.fail),
+      makeSum('pizza_sold_total', this.pizza.sold),
+      makeSum('pizza_failed_total', this.pizza.failed),
+      makeSum('pizza_revenue_total', this.pizza.revenue, 'usd'),
+      makeGauge('latency_avg_ms', avgLatency, 'ms'),
+      makeGauge('system_cpu_percent', sys.cpu, '%'),
+      makeGauge('system_mem_percent', sys.mem, '%'),
     ];
-    const body = lines.join('\n');
-
-    if (!this.canSend()) {
-      this.resetCounters();
-      return;
-    }
 
     try {
-      await axios.post(this.url, body, {
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'text/plain',
-        },
-        timeout: 5000,
-      });
+      await axios.post(
+        this.url,
+        { resourceMetrics: [{ scopeMetrics: [{ metrics: metricsList }] }] },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Basic ${Buffer.from(this.apiKey).toString('base64')}`,
+          },
+        }
+      );
+      console.log('📡 Metrics sent to Grafana');
     } catch (e) {
-      console.error('metrics push failed:', e?.message || e);
+      console.error('❌ Metrics push failed:', e.message);
     } finally {
       this.resetCounters();
     }

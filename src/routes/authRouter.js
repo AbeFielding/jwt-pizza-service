@@ -58,7 +58,6 @@ async function setAuthUser(req, res, next) {
   next();
 }
 
-// Authenticate token
 authRouter.authenticateToken = (req, res, next) => {
   if (!req.user) {
     return res.status(401).send({ message: 'unauthorized' });
@@ -66,7 +65,6 @@ authRouter.authenticateToken = (req, res, next) => {
   next();
 };
 
-// register
 authRouter.post(
   '/',
   asyncHandler(async (req, res) => {
@@ -76,11 +74,12 @@ authRouter.post(
     }
     const user = await DB.addUser({ name, email, password, roles: [{ role: Role.Diner }] });
     const auth = await setAuth(user);
+    metrics.recordAuth(true);
     res.json({ user: user, token: auth });
   })
 );
 
-// login
+// Login
 authRouter.put(
   '/',
   asyncHandler(async (req, res) => {
@@ -88,17 +87,17 @@ authRouter.put(
     try {
       const user = await DB.getUser(email, password);
       const auth = await setAuth(user);
-      metrics.recordAuth(true); 
+      metrics.recordAuth(true);
       res.json({ user: user, token: auth });
     } catch (e) {
-      console.error('login error:', e); 
-      metrics.recordAuth(false);       
+      console.error('login error:', e);
+      metrics.recordAuth(false);
       res.status(401).json({ message: 'invalid credentials' });
     }
   })
 );
 
-// logout
+// Logout
 authRouter.delete(
   '/',
   authRouter.authenticateToken,
@@ -123,9 +122,7 @@ async function clearAuth(req) {
 
 function readAuthToken(req) {
   const authHeader = req.headers.authorization;
-  if (authHeader) {
-    return authHeader.split(' ')[1];
-  }
+  if (authHeader) return authHeader.split(' ')[1];
   return null;
 }
 
