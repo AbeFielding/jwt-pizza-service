@@ -70,7 +70,7 @@ class Metrics {
   async getActiveUsers() {
   try {
     const connection = await DB.getConnection();
-    const [rows] = await connection.execute('SELECT COUNT(*) AS count FROM auth');
+    const [rows] = await connection.execute('SELECT COUNT(DISTINCT userId) AS count FROM auth');
     connection.end();
     return rows[0]?.count ?? 0;
   } catch (err) {
