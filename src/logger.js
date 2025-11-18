@@ -48,38 +48,42 @@ class Logger {
   }
 
   async send(level, type, logData, metadata = {}) {
-    if (!this.enabled) return;
+  if (!this.enabled) return;
 
-    const body = {
-      streams: [
-        {
-          stream: {
-            source: this.source,
-            level,
-            type,
-          },
-          values: [
-            [
-              this.nowString(),
-              JSON.stringify(this.sanitize(logData)),
-              metadata,
-            ],
+  const merged = {
+    ...this.sanitize(logData),
+    ...metadata,
+  };
+
+  const body = {
+    streams: [
+      {
+        stream: {
+          source: this.source,
+          level,
+          type,
+        },
+        values: [
+          [
+            this.nowString(),
+            JSON.stringify(merged),
           ],
-        },
-      ],
-    };
+        ],
+      },
+    ],
+  };
 
-    try {
-      await axios.post(this.url, body, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-      });
-    } catch (err) {
-      console.log('Failed to send log:', err.message);
-    }
+  try {
+    await axios.post(this.url, body, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.userId}:${this.apiKey}`,
+      },
+    });
+  } catch (err) {
+    console.log('Failed to send log:', err.message);
   }
+}
 
   // HTTP LOGGING
   httpLogger = (req, res, next) => {
