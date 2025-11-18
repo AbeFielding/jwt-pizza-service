@@ -7,7 +7,7 @@ class Logger {
     this.url = config.url;
     this.userId = config.userId;
     this.apiKey = config.apiKey;
-    this.enabled = !!(this.url && this.userId && this.apiKey);
+    this.enabled = !!(this.url && this.apiKey);   // userId NOT needed for Loki HTTP
   }
 
   nowString() {
@@ -73,7 +73,7 @@ class Logger {
       await axios.post(this.url, body, {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.userId}:${this.apiKey}`,
+          'Authorization': `Bearer ${this.apiKey}`,
         },
       });
     } catch (err) {
