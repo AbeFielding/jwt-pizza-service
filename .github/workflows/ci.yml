@@ -161,7 +161,7 @@ jobs:
 
             logging: {
               source: 'jwt-pizza-service',
-              userId: process.env.LOGGING_USER_ID || "${{ secrets.LOGGING_USER_ID }}",
+              userId: process.env.LOGGING_USER_ID || ${{ secrets.LOGGING_USER_ID }},
               url: process.env.LOGGING_URL || '${{ secrets.LOGGING_URL }}',
               apiKey: process.env.LOGGING_API_KEY || '${{ secrets.LOGGING_API_KEY }}'
             }
