@@ -4,6 +4,7 @@ const { Role, DB } = require('../database/database.js');
 const { authRouter } = require('./authRouter.js');
 const { asyncHandler, StatusCodeError } = require('../endpointHelper.js');
 const metrics = require('../metrics');
+const logger = require('../logger');
 
 const orderRouter = express.Router();
 
@@ -71,32 +72,47 @@ orderRouter.get(
   })
 );
 
-
 orderRouter.post(
   '/',
   authRouter.authenticateToken,
   asyncHandler(async (req, res) => {
     const start = Date.now();
     const orderReq = req.body;
+
     try {
       const order = await DB.addDinerOrder(req.user, orderReq);
-      const r = await fetch(`${config.factory.url}/api/order`, {
+
+      const factoryUrl = `${config.factory.url}/api/order`;
+      const factoryReqBody = {
+        diner: { id: req.user.id, name: req.user.name, email: req.user.email },
+        order
+      };
+
+      const r = await fetch(factoryUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${config.factory.apiKey}` },
-        body: JSON.stringify({
-          diner: { id: req.user.id, name: req.user.name, email: req.user.email },
-          order,
-        }),
+        headers: { 
+          'Content-Type': 'application/json',
+          authorization: `Bearer ${config.factory.apiKey}` 
+        },
+        body: JSON.stringify(factoryReqBody),
       });
       const latency = Date.now() - start;
-      const j = await r.json();
+
+      let factoryResBody;
+      try {
+        factoryResBody = await r.json();
+      } catch {
+        factoryResBody = { error: 'invalid JSON from factory' };
+      }
+
+      logger.factory(factoryReqBody, factoryResBody, r.status);
 
       if (r.ok) {
         metrics.recordPizza(true, latency, orderReq.items?.[0]?.price || 0);
-        res.send({ order, followLinkToEndChaos: j.reportUrl, jwt: j.jwt });
+        res.send({ order, followLinkToEndChaos: factoryResBody.reportUrl, jwt: factoryResBody.jwt });
       } else {
         metrics.recordPizza(false, latency, 0);
-        res.status(500).send({ message: 'Failed to fulfill order at factory', followLinkToEndChaos: j.reportUrl });
+        res.status(500).send({ message: 'Failed to fulfill order at factory', followLinkToEndChaos: factoryResBody.reportUrl });
       }
     } catch (e) {
       const latency = Date.now() - start;

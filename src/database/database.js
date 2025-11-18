@@ -4,6 +4,7 @@ const config = require('../config.js');
 const { StatusCodeError } = require('../endpointHelper.js');
 const { Role } = require('../model/model.js');
 const dbModel = require('./dbModel.js');
+const logger = require('../logger');
 
 class DB {
   constructor() {
@@ -162,14 +163,14 @@ class DB {
         [user.id]
       );
       for (const order of orders) {
-        let items = await this.query(
+        const items = await this.query(
           connection,
           `SELECT id, menuId, description, price FROM orderItem WHERE orderId=?`,
           [order.id]
         );
         order.items = items;
       }
-      return { dinerId: user.id, orders: orders, page };
+      return { dinerId: user.id, orders, page };
     } finally {
       connection.end();
     }
@@ -247,7 +248,6 @@ class DB {
 
   async getFranchises(authUser, page = 0, limit = 10, nameFilter = '*') {
     const connection = await this.getConnection();
-
     const offset = page * limit;
     nameFilter = nameFilter.replace(/\*/g, '%');
 
@@ -259,9 +259,7 @@ class DB {
       );
 
       const more = franchises.length > limit;
-      if (more) {
-        franchises = franchises.slice(0, limit);
-      }
+      if (more) franchises = franchises.slice(0, limit);
 
       for (const franchise of franchises) {
         if (authUser?.isRole(Role.Admin)) {
@@ -288,9 +286,7 @@ class DB {
         `SELECT objectId FROM userRole WHERE role='franchisee' AND userId=?`,
         [userId]
       );
-      if (franchiseIds.length === 0) {
-        return [];
-      }
+      if (franchiseIds.length === 0) return [];
 
       franchiseIds = franchiseIds.map((v) => v.objectId);
       const franchises = await this.query(
@@ -352,78 +348,77 @@ class DB {
   async deleteStore(franchiseId, storeId) {
     const connection = await this.getConnection();
     try {
-      await this.query(connection, `DELETE FROM store WHERE franchiseId=? AND id=?`, [franchiseId, storeId]);
+      await this.query(connection, `DELETE FROM store WHERE franchiseId=? AND id=?`, [
+        franchiseId,
+        storeId,
+      ]);
     } finally {
       connection.end();
     }
   }
 
-  // ---------- FIXED: LIST USERS ----------
-async listUsers({ page = 1, limit = 10, name = '*' }) {
-  const connection = await this.getConnection();
-  try {
-    const p = Math.max(1, Number(page) || 1);
-    const l = Math.max(1, Number(limit) || 10);
-    const offset = (p - 1) * l;
+  async listUsers({ page = 1, limit = 10, name = '*' }) {
+    const connection = await this.getConnection();
+    try {
+      const p = Math.max(1, Number(page) || 1);
+      const l = Math.max(1, Number(limit) || 10);
+      const offset = (p - 1) * l;
 
-    // Build LIKE pattern: "*" -> "%", otherwise wrap with %...%
-    let like = (name ?? '*').toString().trim();
-    if (like === '*' || like === '') {
-      like = '%';
-    } else {
-      // replace embedded * with % and wrap for contains
-      like = `%${like.replace(/\*/g, '%')}%`;
-    }
+      let like = (name ?? '*').toString().trim();
+      if (like === '*' || like === '') {
+        like = '%';
+      } else {
+        like = `%${like.replace(/\*/g, '%')}%`;
+      }
 
-    // NOTE: inline LIMIT/OFFSET (placeholders can trigger MySQL errors)
-    let users = await this.query(
-      connection,
-      `SELECT id, name, email
+      let users = await this.query(
+        connection,
+        `SELECT id, name, email
          FROM user
-        WHERE name LIKE ?
-        ORDER BY id
-        LIMIT ${l + 1} OFFSET ${offset}`,
-      [like]
-    );
+         WHERE name LIKE ?
+         ORDER BY id
+         LIMIT ${l + 1} OFFSET ${offset}`,
+        [like]
+      );
 
-    const more = users.length > l;
-    if (more) users = users.slice(0, l);
+      const more = users.length > l;
+      if (more) users = users.slice(0, l);
 
-    if (users.length === 0) {
-      return { users: [], more: false };
-    }
+      if (users.length === 0) {
+        return { users: [], more: false };
+      }
 
-    const ids = users.map((u) => u.id);
-    const placeholders = ids.map(() => '?').join(',');
-    const roleRows = await this.query(
-      connection,
-      `SELECT userId, role, objectId
+      const ids = users.map((u) => u.id);
+      const placeholders = ids.map(() => '?').join(',');
+
+      const roleRows = await this.query(
+        connection,
+        `SELECT userId, role, objectId
          FROM userRole
-        WHERE userId IN (${placeholders})`,
-      ids
-    );
+         WHERE userId IN (${placeholders})`,
+        ids
+      );
 
-    const rolesByUser = new Map();
-    for (const r of roleRows) {
-      const arr = rolesByUser.get(r.userId) || [];
-      arr.push({ role: r.role, objectId: r.objectId || undefined });
-      rolesByUser.set(r.userId, arr);
+      const rolesByUser = new Map();
+      for (const r of roleRows) {
+        const arr = rolesByUser.get(r.userId) || [];
+        arr.push({ role: r.role, objectId: r.objectId || undefined });
+        rolesByUser.set(r.userId, arr);
+      }
+
+      const result = users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        roles: rolesByUser.get(u.id) || [],
+      }));
+
+      return { users: result, more };
+    } finally {
+      connection.end();
     }
-
-    const result = users.map((u) => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      roles: rolesByUser.get(u.id) || [],
-    }));
-
-    return { users: result, more };
-  } finally {
-    connection.end();
   }
-}
 
-  // ---------- NEW: DELETE USER ----------
   async deleteUser(userId) {
     const id = Number(userId);
     if (!Number.isFinite(id)) return false;
@@ -440,15 +435,14 @@ async listUsers({ page = 1, limit = 10, name = '*' }) {
 
         return !!(res && typeof res.affectedRows === 'number' && res.affectedRows > 0);
       } catch {
-      await connection.rollback();
-      throw new StatusCodeError('unable to delete franchise', 500);
+        await connection.rollback();
+        throw new StatusCodeError('unable to delete franchise', 500);
       }
     } finally {
       connection.end();
     }
   }
 
-  // ---------- helpers ----------
   getOffset(currentPage = 1, listPerPage) {
     return (currentPage - 1) * listPerPage;
   }
@@ -462,6 +456,7 @@ async listUsers({ page = 1, limit = 10, name = '*' }) {
   }
 
   async query(connection, sql, params) {
+    logger.db(sql, params);
     const [results] = await connection.execute(sql, params);
     return results;
   }

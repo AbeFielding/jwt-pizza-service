@@ -50,6 +50,7 @@ jobs:
           cat > src/config.js <<'EOF'
           module.exports = {
             jwtSecret: 'test-secret',
+
             db: {
               connection: {
                 host: '127.0.0.1',
@@ -60,9 +61,23 @@ jobs:
               },
               listPerPage: 10
             },
+
             factory: {
               url: 'https://pizza-factory.cs329.click',
               apiKey: 'test-factory-key'
+            },
+
+            metrics: {
+              source: 'jwt-pizza-service-test',
+              url: '',
+              apiKey: ''
+            },
+
+            logging: {
+              source: 'jwt-pizza-service-test',
+              userId: 0,
+              url: '',
+              apiKey: ''
             }
           };
           EOF
@@ -104,7 +119,7 @@ jobs:
           CMD ["node","index.js","80"]
           DOCKER
 
-          # Root-level JS (index.js, service.js, endpointHelper.js, init.js if present)
+          # root-level JS
           cp src/*.js dist/ 2>/dev/null || true
 
           cp -r src/routes dist/routes
@@ -117,9 +132,11 @@ jobs:
           cp package*.json dist/
           cp version.json dist/ || true
 
+          # === UPDATED PRODUCTION CONFIG WITH LOGGING ===
           cat > dist/config.js <<'EOF'
           module.exports = {
             jwtSecret: process.env.JWT_SECRET || '${{ secrets.JWT_SECRET }}',
+
             db: {
               connection: {
                 host: process.env.DB_HOSTNAME || '${{ secrets.DB_HOSTNAME }}',
@@ -130,14 +147,23 @@ jobs:
               },
               listPerPage: 10
             },
+
             factory: {
               url: process.env.FACTORY_URL || 'https://pizza-factory.cs329.click',
               apiKey: process.env.FACTORY_API_KEY || '${{ secrets.FACTORY_API_KEY }}'
             },
+
             metrics: {
               source: 'jwt-pizza-service',
               url: process.env.METRICS_URL || '${{ secrets.METRICS_URL }}',
               apiKey: process.env.METRICS_API_KEY || '${{ secrets.METRICS_API_KEY }}'
+            },
+
+            logging: {
+              source: 'jwt-pizza-service',
+              userId: process.env.LOGGING_USER_ID || ${{ secrets.LOGGING_USER_ID }},
+              url: process.env.LOGGING_URL || '${{ secrets.LOGGING_URL }}',
+              apiKey: process.env.LOGGING_API_KEY || '${{ secrets.LOGGING_API_KEY }}'
             }
           };
           EOF
@@ -195,6 +221,7 @@ jobs:
             -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }} \
             --push \
             package
+
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:${{ env.version }}" >> $GITHUB_OUTPUT
 
       - name: Deploy new container to ECS

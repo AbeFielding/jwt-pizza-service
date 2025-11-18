@@ -6,9 +6,11 @@ const userRouter = require('./routes/userRouter.js');
 const version = require('./version.json');
 const config = require('./config.js');
 const metrics = require('./metrics');
-
+const logger = require('./logger');     
 const app = express();
 app.use(express.json());
+app.use(logger.httpLogger);             
+
 app.use(setAuthUser);
 
 metrics.start(60000);
@@ -52,6 +54,15 @@ app.get('/', (req, res) => {
 
 app.use('*', (req, res) => {
   res.status(404).json({ message: 'unknown endpoint' });
+});
+
+app.use((err, req, res, next) => {
+  logger.error(err, {
+    method: req.method,
+    path: req.originalUrl
+  });
+
+  next(err);
 });
 
 app.use((err, req, res, next) => {
