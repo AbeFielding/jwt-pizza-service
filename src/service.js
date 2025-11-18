@@ -6,10 +6,11 @@ const userRouter = require('./routes/userRouter.js');
 const version = require('./version.json');
 const config = require('./config.js');
 const metrics = require('./metrics');
-const logger = require('./logger');     
+const logger = require('./logger');
+
 const app = express();
 app.use(express.json());
-app.use(logger.httpLogger);             
+app.use(logger.httpLogger);
 
 app.use(setAuthUser);
 
@@ -67,7 +68,6 @@ app.use((err, req, res, next) => {
 
 app.use((err, req, res, next) => {
   res.status(err.statusCode ?? 500).json({ message: err.message, stack: err.stack });
-  next();
 });
 
 module.exports = app;
