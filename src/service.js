@@ -57,17 +57,16 @@ app.use('*', (req, res) => {
   res.status(404).json({ message: 'unknown endpoint' });
 });
 
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   logger.error(err, {
     method: req.method,
-    path: req.originalUrl
+    path: req.originalUrl,
   });
 
-  next(err);
+  res
+    .status(err.statusCode ?? 500)
+    .json({ message: err.message, stack: err.stack });
 });
 
-app.use((err, req, res, next) => {
-  res.status(err.statusCode ?? 500).json({ message: err.message, stack: err.stack });
-});
 
 module.exports = app;
