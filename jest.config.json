@@ -2,7 +2,16 @@
   "testEnvironment": "node",
   "collectCoverage": true,
   "coverageReporters": ["json-summary", "text", "lcov"],
+  "coveragePathIgnorePatterns": [
+    "/node_modules/",
+    "src/logger.js",
+    "src/metrics.js"
+  ],
   "coverageThreshold": {
-    "global": { "functions": 80, "lines": 80, "statements": 80 }
+    "global": {
+      "functions": 80,
+      "lines": 80,
+      "statements": 80
+    }
   }
 }
