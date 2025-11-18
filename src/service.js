@@ -57,7 +57,7 @@ app.use('*', (req, res) => {
   res.status(404).json({ message: 'unknown endpoint' });
 });
 
-app.use((err, req, res, _next) => {
+app.use((err, req, res, /* next */) => {
   logger.error(err, {
     method: req.method,
     path: req.originalUrl,
